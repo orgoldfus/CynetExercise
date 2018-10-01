@@ -1,24 +1,41 @@
 ﻿using System.Threading;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace CynetExercise
 {
     static class Logger
     {
-        static ReaderWriterLock lockObject = new ReaderWriterLock();
-        const int MAX_WAIT_TIME = 20000;
+        private static SemaphoreSlim _sync = new SemaphoreSlim(1);
         const string FILE_PATH = @"./traffic.txt";
 
-        public static void log(this string text)
+        public static void Log(this string message)
         {
             try
             {
-                lockObject.AcquireWriterLock(MAX_WAIT_TIME);
-                File.AppendAllLines(FILE_PATH, new[] { text + '\n' });
+                _sync.Wait();
+                File.AppendAllLines(FILE_PATH, new[] { message });
             }
             finally
             {
-                lockObject.ReleaseWriterLock();
+                _sync.Release();
+            }
+        }
+
+        public static async Task LogAsync(this string message)
+        {
+            StreamWriter _stream = null;
+            await _sync.WaitAsync();
+
+            try
+            {
+                _stream = new StreamWriter(FILE_PATH, true);
+                await _stream.WriteLineAsync(message);
+            }
+            finally
+            {
+                _stream.Close();
+                _sync.Release();
             }
         }
     }

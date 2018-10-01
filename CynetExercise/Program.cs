@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace CynetExercise
 {
@@ -14,30 +16,25 @@ namespace CynetExercise
 
     class Program
     {
-        static void OnClientRead(IAsyncResult ar)
+        private static List<Task> _logTasks = new List<Task>();
+        static void Main(string[] args)
         {
-            ClientContext context = ar.AsyncState as ClientContext;
-            if (context == null)
-                return;
+            IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, 7777);
+            TcpListener listener = new TcpListener(endpoint);
+            listener.Start();
 
-            try
-            {
-                int bytesRead = context.Stream.EndRead(ar);
-                string message = Encoding.ASCII.GetString(context.Buffer, 0, bytesRead);
-                Logger.log(message);
-            }
-            finally
-            {
-                context.Stream.Close();
-                context.Client.Close();
-                context.Buffer = null;
-                context = null;
-            }
+            listener.BeginAcceptTcpClient(OnClientAccepted, listener);
+
+            Console.Write("Press enter to exit...");
+            Console.ReadLine();
+            Task.WaitAll(_logTasks.ToArray());
+            listener.Stop();
         }
 
         static void OnClientAccepted(IAsyncResult ar)
         {
             TcpListener listener = ar.AsyncState as TcpListener;
+
             if (listener == null)
                 return;
 
@@ -54,16 +51,22 @@ namespace CynetExercise
             }
         }
 
-        static void Main(string[] args)
+        static void OnClientRead(IAsyncResult ar)
         {
-            TcpListener listener = new TcpListener(new IPEndPoint(IPAddress.Any, 7777));
-            listener.Start();
+            ClientContext context = ar.AsyncState as ClientContext;
 
-            listener.BeginAcceptTcpClient(OnClientAccepted, listener);
-
-            Console.Write("Press enter to exit...");
-            Console.ReadLine();
-            listener.Stop();
+            try
+            {
+                int bytesRead = context.Stream.EndRead(ar);
+                string message = Encoding.ASCII.GetString(context.Buffer, 0, bytesRead);
+                _logTasks.Add(Logger.LogAsync(message));
+            }
+            finally
+            {
+                context.Stream.Close();
+                context.Client.Close();
+                context = null;
+            }
         }
     }
 }
